@@ -14,10 +14,14 @@ func main(){
 
 	controllers.Start = time.Now()
 
-	http.HandleFunc("/", controllers.HandleOnlineCheck)
 	http.HandleFunc("/online", controllers.HandleOnlineCheck)
 	http.HandleFunc("/client/data", controllers.HandleClientGET)
 	http.HandleFunc("/data", controllers.HandleDataRX)
+	buildHandler := http.FileServer(http.Dir("../../client/dht-client/build"))
+	http.Handle("/", buildHandler)
+	http.HandleFunc("/test", func(writer http.ResponseWriter, request *http.Request) {
+		http.ServeFile(writer, request, "../../client/dht-client/build/index.html")
+	})
 
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
