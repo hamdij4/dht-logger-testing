@@ -12,7 +12,7 @@ func main(){
 
 	utils.PrettyLog(consts.LOG_TYPE_INFO, "System starting")
 
-	controllers.Uptime = time.Now()
+	controllers.Start = time.Now()
 
 	http.HandleFunc("/", controllers.HandleOnlineCheck)
 	http.HandleFunc("/online", controllers.HandleOnlineCheck)
