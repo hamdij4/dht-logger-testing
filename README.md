@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://example.com/">
-    <img src="https://ibu.edu.ba/wp-content/uploads/2019/08/IBU_213_57.png" alt="IBU" width=72 height=72>
+    <img src="https://ibu.edu.ba/wp-content/uploads/2019/08/IBU_213_57.png" alt="IBU" width=213 height=57>
   </a>
 
   <h3 align="center">[ IoT ][ RTOS ] Project</h3>
@@ -22,13 +22,15 @@
 
 The project uses a simulated Arduino Mega 2560 board with an ENC28J60 microchip for ethernet and a DHT11 module for sensor scans.<br>
 The remote server is built in native GoLang with a simple UI made with React and Material-UI.
+The project is currently hosted at ``` cc-projecttest.ddns.net ```
 
 ## Running the project
 
 Download the repo via ``` git clone ```
 
 ```diff
-
+cd server/src/
+go build && ./main.go
 ```
 
 ## Bugs
