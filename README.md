@@ -21,7 +21,8 @@
 ## Intro
 
 The project uses a simulated Arduino Mega 2560 board with an ENC28J60 microchip for ethernet and a DHT11 module for sensor scans.<br>
-The remote server is built in native GoLang with a simple UI made with React and Material-UI.
+An SD is simulated in order to store DHT11 data.
+The remote server is built in native GoLang with a simple UI made with React and Material-UI.<br>
 The project is currently hosted at ``` cc-projecttest.ddns.net ```
 
 ## Running the project
@@ -29,7 +30,9 @@ The project is currently hosted at ``` cc-projecttest.ddns.net ```
 Download the repo via ``` git clone ```
 
 ```diff
-cd server/src/
+cd client/dht-client/
+npm install
+cd ../../server/src/
 go build && ./main.go
 ```
 
