@@ -88,6 +88,7 @@ const bull = <span className={classes.bullet}>•</span>;
         </CardContent>
         <CardActions style={{'justifyContent' : 'center'}}>
           <Button size="small"  onClick={()=>{setRefresh(!refresh)}}>Refresh</Button>
+          <Button size="small"  onClick={()=>{window.location.href="http://192.168.220.128/sd-card"}}>View SD Card</Button>
         </CardActions>
       </Card>
         </Grid>

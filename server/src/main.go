@@ -1,10 +1,14 @@
 package main
 
 import (
-	"hamdij4/server/utils"
+	"encoding/json"
 	"hamdij4/server/consts"
 	"hamdij4/server/controllers"
+	"hamdij4/server/models"
+	"hamdij4/server/utils"
+	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -13,6 +17,10 @@ func main(){
 	utils.PrettyLog(consts.LOG_TYPE_INFO, "System starting")
 
 	controllers.Start = time.Now()
+
+	go func() {
+		startMonitoring()
+	}()
 
 	http.HandleFunc("/online", controllers.HandleOnlineCheck)
 	http.HandleFunc("/client/data", controllers.HandleClientGET)
@@ -28,5 +36,29 @@ func main(){
 		utils.PrettyLog(consts.LOG_TYPE_ERROR, "Failed to start server")
 		return
 	}
+}
 
+func startMonitoring(){
+	utils.PrettyLog(consts.LOG_TYPE_INFO, "Monitoring starting")
+	for {
+
+		resp, err := http.Get("http://192.168.220.128/data")
+		if err != nil {
+			utils.PrettyLog(consts.LOG_TYPE_ERROR, "Cannot contact device")
+		}
+		responseData, _ := ioutil.ReadAll(resp.Body)
+		if len(responseData) < 1 {
+			return
+		}
+		var m models.DeviceResponse
+		err = json.Unmarshal(responseData, &m)
+		if err != nil {
+			utils.PrettyLog(consts.LOG_TYPE_ERROR, err.Error())
+		}
+
+		controllers.Values.Humidity = strconv.Itoa(m.Humid)
+		controllers.Values.Temperature = strconv.Itoa(m.Temp)
+
+		time.Sleep(time.Second * 2)
+	}
 }

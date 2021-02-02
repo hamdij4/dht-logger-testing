@@ -5,3 +5,8 @@ type DHTvalues struct {
 	Humidity string
 	Uptime int64
 }
+
+type DeviceResponse struct {
+	Humid int `json: 'humid''`
+	Temp int `json: 'temp''`
+}

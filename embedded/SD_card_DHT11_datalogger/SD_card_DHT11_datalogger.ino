@@ -14,6 +14,11 @@
 #define DHTPIN 25   
 #define DHTTYPE DHT11 
 
+static int RESPONSE_TYPE_DATA = 0;
+static int RESPONSE_TYPE_HTML = 1;
+static int RESPONSE_TYPE_NOT_FOUND = 2;
+static int RESPONSE_TYPE_GET_SD_CARD = 3;
+
 #if STATIC_ADDR
 static byte myip[] = { 192,168,0,35 };
 static byte gwip[] = { 192,168,0,1 };
@@ -31,6 +36,7 @@ static uint32_t sdTimer;
 
 int HttpOkResponse = 0;
 String DHT_DATA = "";
+int dhtdata[2] = {0,0};
 
 DHT dht(DHTPIN, DHTTYPE);
 File dataFile;
@@ -42,15 +48,6 @@ TaskHandle_t ETH_TaskHandle;
 
 void ConnectToSD();
 void ConnectToEth();
-
-static void HandleOnlineGET (byte status, word off, word len) {
-    Ethernet::buffer[off+300] = 0;
-    String data = (const char*) Ethernet::buffer + off;
-    Serial.println(data);
-    if (data.indexOf("Status - OK") > 0)  {
-      HttpOkResponse = 1;
-  }
-}
 
 void setup() {
     Serial.begin(9600);
@@ -67,32 +64,91 @@ void setup() {
     xSemaphoreGive(ExecuteSemaphore);
     Serial.println("Mutex locks given out");
     
-    xTaskCreate(ETHCommTask,"ETH_Task",1024,NULL,1,&DHT_TaskHandle); 
-    xTaskCreate(DHTCommTask,"DHT_Task",1024,NULL,1,&ETH_TaskHandle); 
+    xTaskCreate(ETHCommTask,"ETH_Task",1024,NULL,1,&ETH_TaskHandle); 
+    xTaskCreate(DHTCommTask,"DHT_Task",512,NULL,1,&DHT_TaskHandle); 
     delay(50);
 }
- 
+
+void HandleAndParse(int responseType){
+  if(responseType == RESPONSE_TYPE_DATA){
+    String responseHolder = "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n{\"temp\":" + (String)dhtdata[0] + ", \"humid\":" + (String)dhtdata[1] + "}";
+    char payload[responseHolder.length()];
+    for(int i = 0; i < responseHolder.length(); i++){
+      payload[i] = responseHolder[i];
+    }
+    memcpy(ether.tcpOffset(), payload, sizeof payload);
+    ether.httpServerReply(sizeof payload);
+  } else if(responseType == RESPONSE_TYPE_HTML) {
+    String responseHolder = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<html><head><title>DHT Sensors</title></head><body><h3>Sensor states : </h3><br><h5>Temperature : " +  (String)dhtdata[0] +"</h5><br><h5>Humidity : " + (String)dhtdata[1] +"</h5></body></html>";
+    char payload[responseHolder.length()];
+    for(int i = 0; i < responseHolder.length(); i++){
+      payload[i] = responseHolder[i];
+    } memcpy(ether.tcpOffset(), payload, sizeof payload);
+    ether.httpServerReply(sizeof payload);
+  } else if (responseType == RESPONSE_TYPE_GET_SD_CARD){
+    String responseHolder = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<html><head><title>DHT Sensors - SD CARD</title></head><body><h3>Last 20 inputs in the SD Card : </h3>";
+    xSemaphoreTake(SDAccessLock,portMAX_DELAY);
+    dataFile = SD.open("DHT11Log.txt", FILE_READ);
+    int lines = 0;
+    String CardLine = "";
+    if(dataFile){
+      while(dataFile.available()){
+        if(lines < 20) {
+          responseHolder += "<br><h5>Temperature : " + (String)dataFile.read() ;
+          if(dataFile.available()){
+            responseHolder += ", Humidity : " + (String) dataFile.read() + + "</h5>";
+          } else {
+            responseHolder += + "</h5>";
+          }
+        } else if (lines > 20) break;
+        lines++;
+      }
+    }
+    responseHolder += "</body></html>";
+    dataFile.close();
+    xSemaphoreGive(SDAccessLock); 
+       char payload[responseHolder.length()];
+    for(int i = 0; i < responseHolder.length(); i++){
+      payload[i] = responseHolder[i];
+    } memcpy(ether.tcpOffset(), payload, sizeof payload);
+    ether.httpServerReply(sizeof payload);
+  }else {
+    String responseHolder = "HTTP/1.0 404 Not Found\r\nContent-Type: text/html\r\n\r\n<html><head><title>DHT Sensors</title></head><body><h5> Please  verify your endpoint</h5></body></html>";
+    char payload[responseHolder.length()];
+    for(int i = 0; i < responseHolder.length(); i++){
+      payload[i] = responseHolder[i];
+    } memcpy(ether.tcpOffset(), payload, sizeof payload);
+    ether.httpServerReply(sizeof payload);
+  }
+}
  
 void loop() {
 }
 
 void ETHCommTask(void *pvParameters){ 
   while(1) {
-    // Take exec semaphore
     xSemaphoreTake(ExecuteSemaphore,portMAX_DELAY);
-    
-    ether.packetLoop(ether.packetReceive());
-    if (millis() > timer) {
-      timer = millis() + 1000;
-      Serial.println();
-      if(DHT_DATA != ""){
-        // Write data to URL and send via TCP, handle response via callback
-        ether.browseUrl(PSTR("/data"), DHT_DATA.c_str(), website, HandleOnlineGET);
-      }
-    }
-       
+    word len = ether.packetReceive();
+    word pos = ether.packetLoop(len);     
+    String dataString = "";
+    if (pos > 0){  
+      char* req = (char *) Ethernet::buffer + pos;        
+      dataString = String(req);  
+      if (len > 0) {                        
+        Serial.println(dataString);
+        if (dataString.indexOf("/data") > 0)  {
+          HandleAndParse(RESPONSE_TYPE_DATA);
+        } else if (dataString.indexOf("/web-view") > 0){
+          HandleAndParse(RESPONSE_TYPE_HTML);
+        } else if (dataString.indexOf("/sd-card") > 0){
+          HandleAndParse(RESPONSE_TYPE_GET_SD_CARD);
+        } else {
+          HandleAndParse(RESPONSE_TYPE_NOT_FOUND);
+        }
+      }     
+    };       
     xSemaphoreGive(ExecuteSemaphore);
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
   }
 }
 
@@ -103,6 +159,8 @@ void DHTCommTask(void *pvParameters)
     
     byte RH = dht.readHumidity();
     byte Temp = dht.readTemperature();
+    dhtdata[0] = RH;
+    dhtdata[1] = Temp;
     
     xSemaphoreTake(SDAccessLock,portMAX_DELAY);
     dataFile = SD.open("DHT11Log.txt", FILE_WRITE);
@@ -114,16 +172,13 @@ void DHTCommTask(void *pvParameters)
       dataFile.print("°C,Vlaga = ");
       dataFile.print(RH);
       dataFile.println("%");
-      //write query params for server
       DHT_DATA = (String)"?temp=" + (String)Temp + (String)"&humid=" + (String)RH;
-      Serial.println(DHT_DATA);
     }
-    
     dataFile.close();
     xSemaphoreGive(SDAccessLock); 
     xSemaphoreGive(ExecuteSemaphore);
     
-    vTaskDelay(750 / portTICK_PERIOD_MS); 
+    vTaskDelay(150 / portTICK_PERIOD_MS); 
   }
 }
 
@@ -144,9 +199,9 @@ void ConnectToEth(){
     Serial.println("DHCP success");
   #endif
 
-  if (!ether.dnsLookup(website)){
-    Serial.println("DNS failed, setting it manually");
-  }
+//  if (!ether.dnsLookup(website)){
+//    Serial.println("DNS failed, setting it manually");
+//  }
 
   // Using local adresses while debugging
   #if DEBUG_MODE
